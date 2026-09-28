@@ -25,6 +25,44 @@ class TestGithubAddRelatedRepositories:
         project.save = mock.MagicMock()
         return project
 
+    def setup_404_mocks(
+        self,
+        projects_list,
+        mock_active_projects,
+        mock_get_github_client,
+        mock_get_repository_path,
+        mock_sync_repository,
+    ):
+        """Configure shared GitHub 404 mocks and return the synced repository mock."""
+        mock_active_projects.__iter__.return_value = iter(projects_list)
+        mock_active_projects.count.return_value = len(projects_list)
+        mock_active_projects.__getitem__.side_effect = lambda idx: projects_list[idx]
+        mock_active_projects.order_by.return_value = mock_active_projects
+
+        mock_gh_client = mock.Mock()
+        mock_get_github_client.return_value = mock_gh_client
+
+        def get_repo(path):
+            if path == "OWASP/missing-repo":
+                raise UnknownObjectException(
+                    status=404,
+                    data={"message": "Not Found", "status": "404"},
+                    headers={},
+                )
+            return mock.Mock()
+
+        mock_gh_client.get_repo.side_effect = get_repo
+
+        def get_repository_path(url):
+            return url.replace("https://github.com/", "")
+
+        mock_get_repository_path.side_effect = get_repository_path
+
+        mock_organization = mock.Mock()
+        mock_repository = mock.Mock()
+        mock_sync_repository.return_value = (mock_organization, mock_repository)
+        return mock_repository
+
     @pytest.mark.parametrize(
         ("offset", "projects"),
         [
@@ -168,34 +206,13 @@ class TestGithubAddRelatedRepositories:
             "https://github.com/OWASP/missing-repo",
             "https://github.com/OWASP/test-repo",
         ]
-        mock_projects_list = [mock_project]
-        mock_active_projects.__iter__.return_value = iter(mock_projects_list)
-        mock_active_projects.count.return_value = len(mock_projects_list)
-        mock_active_projects.__getitem__.side_effect = lambda idx: mock_projects_list[idx]
-        mock_active_projects.order_by.return_value = mock_active_projects
-
-        mock_gh_client = mock.Mock()
-        mock_get_github_client.return_value = mock_gh_client
-
-        def get_repo(path):
-            if path == "OWASP/missing-repo":
-                raise UnknownObjectException(
-                    status=404,
-                    data={"message": "Not Found", "status": "404"},
-                    headers={},
-                )
-            return mock.Mock()
-
-        mock_gh_client.get_repo.side_effect = get_repo
-
-        def get_repository_path(url):
-            return url.replace("https://github.com/", "")
-
-        mock_get_repository_path.side_effect = get_repository_path
-
-        mock_organization = mock.Mock()
-        mock_repository = mock.Mock()
-        mock_sync_repository.return_value = (mock_organization, mock_repository)
+        mock_repository = self.setup_404_mocks(
+            [mock_project],
+            mock_active_projects,
+            mock_get_github_client,
+            mock_get_repository_path,
+            mock_sync_repository,
+        )
 
         with mock.patch.object(Project, "bulk_save") as mock_project_bulk_save:
             command.handle(offset=0)
@@ -236,34 +253,13 @@ class TestGithubAddRelatedRepositories:
         other_project.repositories.add = mock.MagicMock()
         other_project.save = mock.MagicMock()
 
-        mock_projects_list = [mock_project, other_project]
-        mock_active_projects.__iter__.return_value = iter(mock_projects_list)
-        mock_active_projects.count.return_value = len(mock_projects_list)
-        mock_active_projects.__getitem__.side_effect = lambda idx: mock_projects_list[idx]
-        mock_active_projects.order_by.return_value = mock_active_projects
-
-        mock_gh_client = mock.Mock()
-        mock_get_github_client.return_value = mock_gh_client
-
-        def get_repo(path):
-            if path == "OWASP/missing-repo":
-                raise UnknownObjectException(
-                    status=404,
-                    data={"message": "Not Found", "status": "404"},
-                    headers={},
-                )
-            return mock.Mock()
-
-        mock_gh_client.get_repo.side_effect = get_repo
-
-        def get_repository_path(url):
-            return url.replace("https://github.com/", "")
-
-        mock_get_repository_path.side_effect = get_repository_path
-
-        mock_organization = mock.Mock()
-        mock_repository = mock.Mock()
-        mock_sync_repository.return_value = (mock_organization, mock_repository)
+        mock_repository = self.setup_404_mocks(
+            [mock_project, other_project],
+            mock_active_projects,
+            mock_get_github_client,
+            mock_get_repository_path,
+            mock_sync_repository,
+        )
 
         with mock.patch.object(Project, "bulk_save") as mock_project_bulk_save:
             command.handle(offset=0)
